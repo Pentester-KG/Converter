@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конвертер документов</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #3498db;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+
+        select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        progress {
+            width: 100%;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .download-btn {
+            display: inline-block;
+            margin-top: 10px;
+            text-decoration: none;
+            background-color: #28a745;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+        }
+
+        .download-btn:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Конвертер документов</h1>
+
+        <form class="upload-form" id="converterForm">
+            <div class="form-group">
+                <label for="document">Выберите файл для конвертации:</label>
+                <input type="file" id="document" name="file" accept=".pdf,.docx,.txt,.png,.jpg" required>
+            </div>
+
+            <div class="form-group">
+                <label for="format">Выберите целевой формат:</label>
+                <select id="format" name="target_format" required>
+                    <option value="">-- Выберите формат --</option>
+                    <option value="docx">DOCX (Word)</option>
+                    <option value="pdf">PDF</option>
+                    <option value="txt">TXT</option>
+                    <option value="png">PNG</option>
+                </select>
+            </div>
+
+            <button type="submit" id="convertBtn">Конвертировать</button>
+        </form>
+
+        <div class="progress-container" id="progressContainer">
+            <p>Идет конвертация...</p>
+            <progress id="conversionProgress" value="0" max="100"></progress>
+        </div>
+
+        <div class="result success" id="successResult">
+            <p>Конвертация завершена успешно!</p>
+            <a href="#" class="download-btn" id="downloadLink">Скачать файл</a>
+        </div>
+
+        <div class="result error" id="errorResult">
+            <p id="errorMessage">Произошла ошибка при конвертации</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('converterForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const form = e.target;
+            const fileInput = document.getElementById('document');
+            const formatSelect = document.getElementById('format');
+            const convertBtn = document.getElementById('convertBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('conversionProgress');
+            const successResult = document.getElementById('successResult');
+            const errorResult = document.getElementById('errorResult');
+            const downloadLink = document.getElementById('downloadLink');
+
+            // Сброс предыдущих результатов
+            successResult.style.display = 'none';
+            errorResult.style.display = 'none';
+
+            // Проверка файла
+            if (!fileInput.files.length) {
+                showError('Пожалуйста, выберите файл');
+                return;
+            }
+
+            if (!formatSelect.value) {
+                showError('Пожалуйста, выберите формат');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('target_format', formatSelect.value);
+
+            // Показать прогресс
+            convertBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            progressBar.value = 0;
+
+            try {
+                // Отправка на сервер
+                const response = await fetch('/api/convert/', {
+                    method: 'POST',
+                    body: formData,
+                    // Заголовки не нужны - FormData автоматически устанавливает Content-Type: multipart/form-data
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Ошибка сервера');
+                }
+
+                const result = await response.json();
+
+                // Показать результат
+                progressBar.value = 100;
+                successResult.style.display = 'block';
+                downloadLink.href = result.converted_file_url;
+                downloadLink.download = result.filename || 'converted_file';
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                convertBtn.disabled = false;
+            }
+
+            function showError(message) {
+                errorResult.style.display = 'block';
+                document.getElementById('errorMessage').textContent = message;
+                progressContainer.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
