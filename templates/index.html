@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Конвертер документов</title>
+    {% csrf_token %}
+
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -157,7 +159,7 @@
 
         <div class="result success" id="successResult">
             <p>Конвертация завершена успешно!</p>
-            <a href="#" class="download-btn" id="downloadLink">Скачать файл</a>
+            <a href="api/download/<int:conversion_id>/" class="download-btn" id="downloadLink">Скачать файл</a>
         </div>
 
         <div class="result error" id="errorResult">
@@ -165,78 +167,117 @@
         </div>
     </div>
 
-    <script>
-        document.getElementById('converterForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
+<script>
 
-            const form = e.target;
-            const fileInput = document.getElementById('document');
-            const formatSelect = document.getElementById('format');
-            const convertBtn = document.getElementById('convertBtn');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('conversionProgress');
-            const successResult = document.getElementById('successResult');
-            const errorResult = document.getElementById('errorResult');
-            const downloadLink = document.getElementById('downloadLink');
-
-            // Сброс предыдущих результатов
-            successResult.style.display = 'none';
-            errorResult.style.display = 'none';
-
-            // Проверка файла
-            if (!fileInput.files.length) {
-                showError('Пожалуйста, выберите файл');
-                return;
+    // Функция для получения CSRF токена из cookie
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
             }
+        }
+    }
+    return cookieValue;
+}
 
-            if (!formatSelect.value) {
-                showError('Пожалуйста, выберите формат');
-                return;
+document.getElementById('converterForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const fileInput = document.getElementById('document');
+    const formatSelect = document.getElementById('format');
+    const convertBtn = document.getElementById('convertBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('conversionProgress');
+    const successResult = document.getElementById('successResult');
+    const errorResult = document.getElementById('errorResult');
+    const downloadLink = document.getElementById('downloadLink');
+
+    // Сброс предыдущих результатов
+    successResult.style.display = 'none';
+    errorResult.style.display = 'none';
+    progressBar.value = 0;
+
+    // Проверка файла
+    if (!fileInput.files.length) {
+        showError('Пожалуйста, выберите файл');
+        return;
+    }
+
+    if (!formatSelect.value) {
+        showError('Пожалуйста, выберите формат');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('target_format', formatSelect.value);
+
+    // Показать прогресс
+    convertBtn.disabled = true;
+    progressContainer.style.display = 'block';
+
+    try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/convert/");
+
+        // Добавляем CSRF-токен в заголовки
+        xhr.setRequestHeader("X-CSRFToken", getCookie('csrftoken'));
+
+        xhr.upload.onprogress = function (event) {
+            if (event.lengthComputable) {
+                const percentComplete = (event.loaded / event.total) * 100;
+                progressBar.value = percentComplete;
             }
+        };
 
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('target_format', formatSelect.value);
-
-            // Показать прогресс
-            convertBtn.disabled = true;
-            progressContainer.style.display = 'block';
-            progressBar.value = 0;
-
+        xhr.onload = function () {
             try {
-                // Отправка на сервер
-                const response = await fetch('/api/convert/', {
-                    method: 'POST',
-                    body: formData,
-                    // Заголовки не нужны - FormData автоматически устанавливает Content-Type: multipart/form-data
-                });
+                if (xhr.status === 200) {
+                    const result = JSON.parse(xhr.responseText);
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || 'Ошибка сервера');
+                    if (!result.converted_file_url) {
+                        throw new Error('Ошибка: сервер не вернул ссылку на файл');
+                    }
+
+                    progressBar.value = 100;
+                    successResult.style.display = 'block';
+                    downloadLink.href = result.converted_file_url;
+                    downloadLink.download = result.filename || 'converted_file';
+                } else {
+                    showError("Ошибка сервера: " + xhr.statusText);
                 }
-
-                const result = await response.json();
-
-                // Показать результат
-                progressBar.value = 100;
-                successResult.style.display = 'block';
-                downloadLink.href = result.converted_file_url;
-                downloadLink.download = result.filename || 'converted_file';
-
             } catch (error) {
-                showError(error.message);
-            } finally {
-                convertBtn.disabled = false;
+                showError("Ошибка обработки ответа: " + error.message);
             }
+        };
 
-            function showError(message) {
-                errorResult.style.display = 'block';
-                document.getElementById('errorMessage').textContent = message;
-                progressContainer.style.display = 'none';
-            }
-        });
-    </script>
+        xhr.onerror = function () {
+            showError("Ошибка соединения с сервером");
+        };
+
+        xhr.send(formData);
+
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        convertBtn.disabled = false;
+    }
+
+    function showError(message) {
+        errorResult.style.display = 'block';
+        document.getElementById('errorMessage').textContent = message;
+        progressContainer.style.display = 'none';
+    }
+});
+
+</script>
+
 </body>
 </html>
