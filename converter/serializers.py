@@ -1,13 +1,6 @@
 from rest_framework import serializers
-from .models import Conversion
 
-
-class FileUploadSerializer(serializers.Serializer):
+class FileConvertSerializer(serializers.Serializer):
     file = serializers.FileField()
-    target_format = serializers.CharField(max_length=10)
+    target_format = serializers.ChoiceField(choices=['pdf', 'jpg', 'png', 'jpeg'])
 
-
-class ConversionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Conversion
-        fields = '__all__'

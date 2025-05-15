@@ -1,8 +1,7 @@
 from django.urls import path
-from .views import ConvertFileView, DownloadFileView, home, convert_view
+from .views import FileConvertAPIView
 
 urlpatterns = [
-    path('', home, name='home'),
-    path('convert/', convert_view, name='convert'),
-    path('download/<int:conversion_id>/', DownloadFileView.as_view(), name='download'),
+    path('api/convert/', FileConvertAPIView.as_view(), name='file-convert'),
+
 ]
